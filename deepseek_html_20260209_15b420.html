@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Онлайн фоторедактор - Удаление фона</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        
+        .editor-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .canvas-container {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        #canvas {
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: crosshair;
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="%23f0f0f0"/><rect x="10" y="10" width="10" height="10" fill="%23e0e0e0"/><rect x="0" y="0" width="10" height="10" fill="%23e0e0e0"/></svg>');
+            max-width: 100%;
+        }
+        
+        .controls {
+            width: 300px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .control-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .button-group {
+            display: grid;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            line-height: 1.6;
+        }
+        
+        .instructions h3 {
+            margin-bottom: 10px;
+            color: #004085;
+        }
+        
+        .size-display {
+            text-align: center;
+            font-weight: bold;
+            color: #007bff;
+            margin-top: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            .editor-container {
+                flex-direction: column;
+            }
+            .controls {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Онлайн фоторедактор - Удаление фона</h1>
+        
+        <div class="editor-container">
+            <div class="canvas-container">
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label for="imageUpload">📁 Загрузите фото:</label>
+                    <input type="file" id="imageUpload" accept="image/*" class="btn-secondary" style="width: 100%; padding: 10px;">
+                </div>
+                
+                <div class="control-group">
+                    <label>🖌️ Инструменты:</label>
+                    <div class="button-group">
+                        <button id="eraserBtn" class="btn-primary">Кисть удаления</button>
+                        <button id="restoreBtn" class="btn-secondary">Кисть восстановления</button>
+                        <button id="clearBtn" class="btn-secondary">Сбросить всё</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="brushSize">📏 Размер кисти:</label>
+                    <input type="range" id="brushSize" min="1" max="100" value="20">
+                    <div class="size-display" id="brushSizeDisplay">20px</div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="brushOpacity">🎨 Прозрачность:</label>
+                    <input type="range" id="brushOpacity" min="1" max="100" value="100">
+                    <div class="size-display" id="opacityDisplay">100%</div>
+                </div>
+                
+                <div class="button-group">
+                    <button id="downloadBtn" class="btn-success">💾 Скачать PNG</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h3>📝 Инструкция:</h3>
+            <p>1. Загрузите фотографию с помощью кнопки "Загрузите фото"</p>
+            <p>2. Используйте "Кисть удаления" чтобы стирать фон (становится прозрачным)</p>
+            <p>3. Используйте "Кисть восстановления" чтобы вернуть случайно стёртые участки</p>
+            <p>4. Настройте размер и прозрачность кисти для точной работы</p>
+            <p>5. Нажмите "Скачать PNG" чтобы сохранить изображение с прозрачным фоном</p>
+        </div>
+    </div>
+
+    <script>
+        // Элементы DOM
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageUpload = document.getElementById('imageUpload');
+        const brushSize = document.getElementById('brushSize');
+        const brushOpacity = document.getElementById('brushOpacity');
+        const brushSizeDisplay = document.getElementById('brushSizeDisplay');
+        const opacityDisplay = document.getElementById('opacityDisplay');
+        const eraserBtn = document.getElementById('eraserBtn');
+        const restoreBtn = document.getElementById('restoreBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Переменные состояния
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentTool = 'eraser'; // 'eraser' или 'restore'
+        let originalImage = null;
+        let originalImageData = null;
+
+        // Настройки кисти
+        let brushSizeValue = parseInt(brushSize.value);
+        let brushOpacityValue = parseInt(brushOpacity.value) / 100;
+
+        // Обновление отображения размера кисти
+        brushSize.addEventListener('input', () => {
+            brushSizeValue = parseInt(brushSize.value);
+            brushSizeDisplay.textContent = `${brushSizeValue}px`;
+        });
+
+        // Обновление отображения прозрачности
+        brushOpacity.addEventListener('input', () => {
+            brushOpacityValue = parseInt(brushOpacity.value) / 100;
+            opacityDisplay.textContent = `${parseInt(brushOpacity.value)}%`;
+        });
+
+        // Выбор инструментов
+        eraserBtn.addEventListener('click', () => {
+            currentTool = 'eraser';
+            eraserBtn.classList.add('btn-primary');
+            restoreBtn.classList.remove('btn-primary');
+            eraserBtn.classList.remove('btn-secondary');
+            restoreBtn.classList.add('btn-secondary');
+        });
+
+        restoreBtn.addEventListener('click', () => {
+            currentTool = 'restore';
+            restoreBtn.classList.add('btn-primary');
+            eraserBtn.classList.remove('btn-primary');
+            restoreBtn.classList.remove('btn-secondary');
+            eraserBtn.classList.add('btn-secondary');
+        });
+
+        // Загрузка изображения
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    // Устанавливаем размер canvas по размеру изображения
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    
+                    // Очищаем canvas и рисуем изображение
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                    
+                    // Сохраняем оригинальное изображение
+                    originalImage = img;
+                    originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Сброс к исходному изображению
+        clearBtn.addEventListener('click', () => {
+            if (originalImage) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(originalImage, 0, 0);
+                originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            }
+        });
+
+        // Функции рисования
+        function startDrawing(e) {
+            isDrawing = true;
+            [lastX, lastY] = getMousePos(e);
+            draw(e); // Начинаем рисовать сразу
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+
+            const [x, y] = getMousePos(e);
+            
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineWidth = brushSizeValue;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.globalAlpha = brushOpacityValue;
+            
+            if (currentTool === 'eraser') {
+                // Используем destination-out для создания прозрачности
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.strokeStyle = 'rgba(0,0,0,1)';
+            } else {
+                // Восстанавливаем из оригинального изображения
+                if (!originalImageData) return;
+                
+                // Создаем временный canvas для восстановления
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                
+                // Восстанавливаем оригинальное изображение
+                tempCtx.putImageData(originalImageData, 0, 0);
+                
+                // Рисуем только область под кистью
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.drawImage(tempCanvas, 
+                    x - brushSizeValue/2, y - brushSizeValue/2, 
+                    brushSizeValue, brushSizeValue,
+                    x - brushSizeValue/2, y - brushSizeValue/2,
+                    brushSizeValue, brushSizeValue
+                );
+            }
+            
+            if (currentTool === 'eraser') {
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+            
+            [lastX, lastY] = [x, y];
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+            ctx.beginPath(); // Сбрасываем путь
+        }
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [
+                e.clientX - rect.left,
+                e.clientY - rect.top
+            ];
+        }
+
+        // События мыши
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        // Скачивание изображения
+        downloadBtn.addEventListener('click', () => {
+            if (!originalImage) {
+                alert('Пожалуйста, сначала загрузите изображение');
+                return;
+            }
+
+            // Создаем ссылку для скачивания
+            const link = document.createElement('a');
+            link.download = 'изображение_без_фона.png';
+            link.href = canvas.toDataURL('image/png');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        // Инициализация инструментов
+        eraserBtn.click(); // Активируем кисть удаления по умолчанию
+    </script>
+</body>
+</html>
