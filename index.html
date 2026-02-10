@@ -42,14 +42,18 @@
         .canvas-container {
             flex: 1;
             min-width: 300px;
+            position: relative;
+            overflow: auto;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="%23f0f0f0"/><rect x="10" y="10" width="10" height="10" fill="%23e0e0e0"/><rect x="0" y="0" width="10" height="10" fill="%23e0e0e0"/></svg>');
         }
         
         #canvas {
-            border: 2px solid #ddd;
-            border-radius: 5px;
+            display: block;
             cursor: crosshair;
-            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><rect width="20" height="20" fill="%23f0f0f0"/><rect x="10" y="10" width="10" height="10" fill="%23e0e0e0"/><rect x="0" y="0" width="10" height="10" fill="%23e0e0e0"/></svg>');
             max-width: 100%;
+            max-height: 70vh;
         }
         
         .controls {
@@ -137,12 +141,42 @@
             margin-top: 5px;
         }
         
+        .tool-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+        
+        .tool-icon {
+            font-size: 24px;
+        }
+        
+        .tool-name {
+            font-weight: bold;
+        }
+        
+        .preview-circle {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid #007bff;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        
         @media (max-width: 768px) {
             .editor-container {
                 flex-direction: column;
             }
             .controls {
                 width: 100%;
+            }
+            #canvas {
+                max-height: 50vh;
             }
         }
     </style>
@@ -152,14 +186,20 @@
         <h1>🎨 Онлайн фоторедактор - Удаление фона</h1>
         
         <div class="editor-container">
-            <div class="canvas-container">
+            <div class="canvas-container" id="canvasContainer">
                 <canvas id="canvas"></canvas>
+                <div class="preview-circle" id="brushPreview"></div>
             </div>
             
             <div class="controls">
                 <div class="control-group">
                     <label for="imageUpload">📁 Загрузите фото:</label>
                     <input type="file" id="imageUpload" accept="image/*" class="btn-secondary" style="width: 100%; padding: 10px;">
+                </div>
+                
+                <div class="tool-status">
+                    <span class="tool-icon" id="currentToolIcon">🖌️</span>
+                    <span class="tool-name" id="currentToolName">Кисть удаления</span>
                 </div>
                 
                 <div class="control-group">
@@ -196,6 +236,7 @@
             <p>3. Используйте "Кисть восстановления" чтобы вернуть случайно стёртые участки</p>
             <p>4. Настройте размер и прозрачность кисти для точной работы</p>
             <p>5. Нажмите "Скачать PNG" чтобы сохранить изображение с прозрачным фоном</p>
+            <p><strong>Совет:</strong> Для точного удаления фона увеличьте изображение в браузере (Ctrl + колесо мыши)</p>
         </div>
     </div>
 
@@ -212,26 +253,30 @@
         const restoreBtn = document.getElementById('restoreBtn');
         const clearBtn = document.getElementById('clearBtn');
         const downloadBtn = document.getElementById('downloadBtn');
+        const currentToolIcon = document.getElementById('currentToolIcon');
+        const currentToolName = document.getElementById('currentToolName');
+        const brushPreview = document.getElementById('brushPreview');
+        const canvasContainer = document.getElementById('canvasContainer');
 
         // Переменные состояния
         let isDrawing = false;
-        let lastX = 0;
-        let lastY = 0;
-        let currentTool = 'eraser'; // 'eraser' или 'restore'
+        let currentTool = 'eraser';
         let originalImage = null;
         let originalImageData = null;
+        let canvasScale = 1;
+        let canvasOffset = { x: 0, y: 0 };
 
         // Настройки кисти
         let brushSizeValue = parseInt(brushSize.value);
         let brushOpacityValue = parseInt(brushOpacity.value) / 100;
 
-        // Обновление отображения размера кисти
+        // Обновление отображения
         brushSize.addEventListener('input', () => {
             brushSizeValue = parseInt(brushSize.value);
             brushSizeDisplay.textContent = `${brushSizeValue}px`;
+            updateBrushPreview();
         });
 
-        // Обновление отображения прозрачности
         brushOpacity.addEventListener('input', () => {
             brushOpacityValue = parseInt(brushOpacity.value) / 100;
             opacityDisplay.textContent = `${parseInt(brushOpacity.value)}%`;
@@ -240,19 +285,29 @@
         // Выбор инструментов
         eraserBtn.addEventListener('click', () => {
             currentTool = 'eraser';
-            eraserBtn.classList.add('btn-primary');
-            restoreBtn.classList.remove('btn-primary');
-            eraserBtn.classList.remove('btn-secondary');
-            restoreBtn.classList.add('btn-secondary');
+            eraserBtn.className = 'btn-primary';
+            restoreBtn.className = 'btn-secondary';
+            currentToolIcon.textContent = '🖌️';
+            currentToolName.textContent = 'Кисть удаления';
+            updateBrushPreview();
         });
 
         restoreBtn.addEventListener('click', () => {
             currentTool = 'restore';
-            restoreBtn.classList.add('btn-primary');
-            eraserBtn.classList.remove('btn-primary');
-            restoreBtn.classList.remove('btn-secondary');
-            eraserBtn.classList.add('btn-secondary');
+            restoreBtn.className = 'btn-primary';
+            eraserBtn.className = 'btn-secondary';
+            currentToolIcon.textContent = '🔧';
+            currentToolName.textContent = 'Кисть восстановления';
+            updateBrushPreview();
         });
+
+        // Обновление превью кисти
+        function updateBrushPreview() {
+            const size = brushSizeValue * canvasScale;
+            brushPreview.style.width = `${size}px`;
+            brushPreview.style.height = `${size}px`;
+            brushPreview.style.borderColor = currentTool === 'eraser' ? '#dc3545' : '#28a745';
+        }
 
         // Загрузка изображения
         imageUpload.addEventListener('change', (e) => {
@@ -263,124 +318,218 @@
             reader.onload = (event) => {
                 const img = new Image();
                 img.onload = () => {
-                    // Устанавливаем размер canvas по размеру изображения
-                    canvas.width = img.width;
+                    // Рассчитываем размер canvas с учетом контейнера
+                    const containerWidth = canvasContainer.clientWidth - 4; // минус border
+                    const containerHeight = window.innerHeight * 0.7;
+                    
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    // Масштабируем если изображение слишком большое
+                    if (width > containerWidth) {
+                        const ratio = containerWidth / width;
+                        width = containerWidth;
+                        height = height * ratio;
+                    }
+                    
+                    if (height > containerHeight) {
+                        const ratio = containerHeight / height;
+                        height = containerHeight;
+                        width = width * ratio;
+                    }
+                    
+                    canvas.width = img.width; // Сохраняем оригинальные размеры для качества
                     canvas.height = img.height;
                     
-                    // Очищаем canvas и рисуем изображение
+                    // Рассчитываем масштаб для координат
+                    canvasScale = img.width / width;
+                    
+                    // Устанавливаем CSS размеры
+                    canvas.style.width = `${width}px`;
+                    canvas.style.height = `${height}px`;
+                    
+                    // Рассчитываем отступы для центрирования
+                    canvasOffset.x = (canvasContainer.clientWidth - width) / 2;
+                    canvasOffset.y = 0;
+                    
+                    // Очищаем и рисуем изображение
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.drawImage(img, 0, 0);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     
                     // Сохраняем оригинальное изображение
                     originalImage = img;
                     originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    updateBrushPreview();
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
 
-        // Сброс к исходному изображению
+        // Сброс
         clearBtn.addEventListener('click', () => {
             if (originalImage) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(originalImage, 0, 0);
+                ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
                 originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             }
         });
 
+        // Получение позиции мыши с учетом масштаба и отступов
+        function getMousePos(e) {
+            const rect = canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left - canvasOffset.x;
+            const y = e.clientY - rect.top - canvasOffset.y;
+            
+            // Масштабируем координаты
+            const scaleX = canvas.width / canvas.clientWidth;
+            const scaleY = canvas.height / canvas.clientHeight;
+            
+            return [
+                Math.round(x * scaleX),
+                Math.round(y * scaleY)
+            ];
+        }
+
+        // Показ превью кисти
+        canvasContainer.addEventListener('mousemove', (e) => {
+            if (!originalImage) return;
+            
+            const rect = canvasContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const size = brushSizeValue * canvasScale;
+            brushPreview.style.left = `${x - size/2}px`;
+            brushPreview.style.top = `${y - size/2}px`;
+            brushPreview.style.display = 'block';
+            
+            // Если рисуем, продолжаем рисовать
+            if (isDrawing) {
+                draw(e);
+            }
+        });
+
+        canvasContainer.addEventListener('mouseleave', () => {
+            brushPreview.style.display = 'none';
+        });
+
         // Функции рисования
         function startDrawing(e) {
+            if (!originalImage) return;
             isDrawing = true;
-            [lastX, lastY] = getMousePos(e);
-            draw(e); // Начинаем рисовать сразу
+            draw(e);
         }
 
         function draw(e) {
-            if (!isDrawing) return;
+            if (!isDrawing || !originalImage) return;
 
             const [x, y] = getMousePos(e);
             
-            ctx.globalCompositeOperation = 'source-over';
-            ctx.lineWidth = brushSizeValue;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
             ctx.globalAlpha = brushOpacityValue;
             
+            // Рисуем круг
+            ctx.beginPath();
+            ctx.arc(x, y, brushSizeValue / 2, 0, Math.PI * 2);
+            
             if (currentTool === 'eraser') {
-                // Используем destination-out для создания прозрачности
-                ctx.globalCompositeOperation = 'destination-out';
-                ctx.strokeStyle = 'rgba(0,0,0,1)';
+                ctx.fill();
             } else {
-                // Восстанавливаем из оригинального изображения
-                if (!originalImageData) return;
-                
-                // Создаем временный canvas для восстановления
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = canvas.width;
-                tempCanvas.height = canvas.height;
-                
-                // Восстанавливаем оригинальное изображение
-                tempCtx.putImageData(originalImageData, 0, 0);
-                
-                // Рисуем только область под кистью
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.drawImage(tempCanvas, 
-                    x - brushSizeValue/2, y - brushSizeValue/2, 
-                    brushSizeValue, brushSizeValue,
-                    x - brushSizeValue/2, y - brushSizeValue/2,
-                    brushSizeValue, brushSizeValue
-                );
+                // Для восстановления используем оригинальное изображение
+                if (originalImageData) {
+                    // Создаем временный canvas для копирования
+                    const tempCanvas = document.createElement('canvas');
+                    const tempCtx = tempCanvas.getContext('2d');
+                    tempCanvas.width = brushSizeValue;
+                    tempCanvas.height = brushSizeValue;
+                    
+                    // Копируем область из оригинала
+                    tempCtx.putImageData(
+                        originalImageData,
+                        -x + brushSizeValue/2,
+                        -y + brushSizeValue/2
+                    );
+                    
+                    // Рисуем на основном canvas
+                    ctx.drawImage(tempCanvas, x - brushSizeValue/2, y - brushSizeValue/2);
+                }
             }
-            
-            if (currentTool === 'eraser') {
-                ctx.beginPath();
-                ctx.moveTo(lastX, lastY);
-                ctx.lineTo(x, y);
-                ctx.stroke();
-            }
-            
-            [lastX, lastY] = [x, y];
         }
 
         function stopDrawing() {
             isDrawing = false;
-            ctx.beginPath(); // Сбрасываем путь
-        }
-
-        function getMousePos(e) {
-            const rect = canvas.getBoundingClientRect();
-            return [
-                e.clientX - rect.left,
-                e.clientY - rect.top
-            ];
         }
 
         // События мыши
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
+        canvasContainer.addEventListener('mousedown', startDrawing);
+        canvasContainer.addEventListener('mousemove', draw);
+        canvasContainer.addEventListener('mouseup', stopDrawing);
+        canvasContainer.addEventListener('mouseleave', stopDrawing);
 
-        // Скачивание изображения
+        // События для сенсорных устройств
+        canvasContainer.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvasContainer.dispatchEvent(mouseEvent);
+        });
+
+        canvasContainer.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            canvasContainer.dispatchEvent(mouseEvent);
+        });
+
+        canvasContainer.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            const mouseEvent = new MouseEvent('mouseup');
+            canvasContainer.dispatchEvent(mouseEvent);
+        });
+
+        // Скачивание
         downloadBtn.addEventListener('click', () => {
             if (!originalImage) {
                 alert('Пожалуйста, сначала загрузите изображение');
                 return;
             }
 
-            // Создаем ссылку для скачивания
+            // Создаем временный canvas для скачивания
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            
+            // Копируем изображение с прозрачностью
+            tempCtx.drawImage(canvas, 0, 0);
+            
             const link = document.createElement('a');
             link.download = 'изображение_без_фона.png';
-            link.href = canvas.toDataURL('image/png');
+            link.href = tempCanvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         });
 
-        // Инициализация инструментов
-        eraserBtn.click(); // Активируем кисть удаления по умолчанию
+        // Инициализация
+        eraserBtn.click();
+        
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            if (originalImage) {
+                // Пересчитываем позицию и масштаб
+                const event = new Event('change');
+                imageUpload.dispatchEvent(event);
+            }
+        });
     </script>
 </body>
 </html>
